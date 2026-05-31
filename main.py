@@ -24,7 +24,27 @@ def get_twitter_status(username):
 
         html = resp.text
 
-        # 1. Проверка по заголовку страницы (точный признак)
+        # --- Самая точная проверка по внутренним данным страницы ---
+        # Ищем JSON-фрагмент с screen_name (есть только у живых аккаунтов)
+        screen_name_pattern = r'"screen_name"\s*:\s*"' + re.escape(username) + r'"'
+        if re.search(screen_name_pattern, html):
+            # Дополнительно проверяем, не закрыт ли профиль
+            if "These Tweets are protected" in html:
+                return "protected"
+            return "active"
+
+        # Ищем ошибку ApiError для конкретного пользователя (блокировка)
+        error_pattern = r'"errors"\s*:\s*\{[^}]*"' + re.escape(username) + r'"\s*:\s*\{[^}]*"displayName"\s*:\s*"ApiError"'
+        if re.search(error_pattern, html):
+            return "suspended"
+
+        # Альтернативный признак блокировки – fetchStatus со значением failed
+        fetch_fail_pattern = r'"fetchStatus"\s*:\s*\{[^}]*"' + re.escape(username.lower()) + r'"\s*:\s*"failed"'
+        if re.search(fetch_fail_pattern, html):
+            return "suspended"
+
+        # --- Запасные варианты, если новые маркеры не найдены ---
+        # Проверка по <title>
         title_match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
         if title_match:
             title = title_match.group(1).strip().lower()
@@ -33,19 +53,11 @@ def get_twitter_status(username):
             if "page not found" in title:
                 return "not_found"
 
-        # 2. Приватный аккаунт
-        if "These Tweets are protected" in html:
-            return "protected"
-
-        # 3. Заблокированный аккаунт (data-testid="emptyState" + текст)
-        if re.search(r'data-testid="emptyState"', html) and "Account suspended" in html:
-            return "suspended"
-
-        # 4. Запасной вариант блокировки (старая фраза)
+        # Статическая фраза о блокировке (старый дизайн)
         if re.search(r"This account has been suspended", html, re.IGNORECASE):
             return "suspended"
 
-        # 5. Признаки живого аккаунта (есть react-root и нет маркеров блокировки)
+        # Если есть react-root и ничего плохого не найдено — считаем активным
         if "react-root" in html:
             return "active"
 
