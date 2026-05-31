@@ -1,16 +1,13 @@
 import os
-import time
+import sys
 import requests
 import re
-import json
-import sys
 
 # ─── Конфигурация из переменных окружения ─────────────────────────────
 USERNAME = os.environ.get("TWITTER_USERNAME")
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-# Файл для хранения предыдущего статуса (на томе Railway)
 STATE_FILE = "/data/last_status.txt"
 
 # ─── Функции ─────────────────────────────────────────────────────────
@@ -49,7 +46,8 @@ def send_telegram_message(text):
 def read_last_status():
     try:
         with open(STATE_FILE, "r") as f:
-            return f.read().strip()
+            data = f.read().strip()
+            return data if data else None   # пустой файл считаем отсутствием статуса
     except FileNotFoundError:
         return None
 
@@ -69,11 +67,25 @@ def main():
 
     last_status = read_last_status()
 
-    # Если статус изменился с "suspended" на что-то другое (аккаунт разблокирован)
+    # Первый запуск (или состояние потеряно) — сразу шлём информационное сообщение
+    if last_status is None:
+        send_telegram_message(
+            f"📡 Мониторинг аккаунта @{USERNAME} запущен.\n"
+            f"Текущий статус: {current_status}"
+        )
+        write_last_status(current_status)
+        print("Initial status notification sent. Monitoring will continue from next run.")
+        return   # на этом первый запуск завершён
+
+    # Если аккаунт был заблокирован и теперь статус изменился (разблокировка)
     if last_status == "suspended" and current_status != "suspended":
-        send_telegram_message(f"🚀 Аккаунт @{USERNAME} разблокирован!\nТекущий статус: {current_status}")
-    # Если впервые или статус изменился как-то ещё — просто запоминаем
-    write_last_status(current_status)
+        send_telegram_message(
+            f"🚀 Аккаунт @{USERNAME} разблокирован!\n"
+            f"Текущий статус: {current_status}"
+        )
+    # Обновляем сохранённый статус, если он изменился (в любом случае)
+    if last_status != current_status:
+        write_last_status(current_status)
 
 if __name__ == "__main__":
     main()
