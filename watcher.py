@@ -23,13 +23,13 @@ def is_suspended():
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        page.goto(f"https://x.com/{USERNAME}", wait_until="domcontentloaded")
+        page.goto(f"https://x.com/{USERNAME}", wait_until="networkidle")
 
-        html = page.content().lower()
+        text = page.inner_text("body").lower()
 
         browser.close()
 
-        return "account suspended" in html
+        return "account suspended" in text
 
 
 state = is_suspended()
