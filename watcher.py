@@ -25,43 +25,51 @@ def notify(message):
 
 
 def check_account():
-    url = f"https://cdn.syndication.twimg.com/widgets/followbutton/info.json?screen_names={USERNAME}"
+    url = f"https://x.com/{USERNAME}"
 
     response = requests.get(url, headers=HEADERS, timeout=15)
+    html = response.text.lower()
 
-    if response.status_code != 200:
-        return False
+    suspended_markers = [
+        "suspended",
+        "account is suspended",
+        "account suspended",
+        "action":"suspended"
+    ]
 
-    data = response.json()
-
-    if not data:
-        return False
+    for marker in suspended_markers:
+        if marker in html:
+            return False
 
     return True
 
 
-current_state = check_account()
+try:
+    current_state = check_account()
 
-if current_state:
-    notify(f"Watcher started\n@{USERNAME} СЕЙЧАС ДОСТУПЕН")
-else:
-    notify(f"Watcher started\n@{USERNAME} СЕЙЧАС ЗАБЛОКИРОВАН / НЕ НАЙДЕН")
+    if current_state:
+        notify(f"Watcher started\n@{USERNAME} СЕЙЧАС ДОСТУПЕН")
+    else:
+        notify(f"Watcher started\n@{USERNAME} СЕЙЧАС ЗАБЛОКИРОВАН")
 
-last_state = current_state
+    last_state = current_state
 
-while True:
-    try:
-        current_state = check_account()
+    while True:
+        try:
+            current_state = check_account()
 
-        if current_state != last_state:
-            if current_state:
-                notify(f"🚨 @{USERNAME} РАЗБЛОКИРОВАН")
-            else:
-                notify(f"⚠️ @{USERNAME} СНОВА НЕДОСТУПЕН")
+            if current_state != last_state:
+                if current_state:
+                    notify(f"🚨 @{USERNAME} РАЗБЛОКИРОВАН")
+                else:
+                    notify(f"⚠️ @{USERNAME} СНОВА ЗАБЛОКИРОВАН")
 
-            last_state = current_state
+                last_state = current_state
 
-    except Exception as e:
-        notify(f"Ошибка: {e}")
+        except Exception as e:
+            notify(f"Loop error: {e}")
 
-    time.sleep(CHECK_INTERVAL)
+        time.sleep(CHECK_INTERVAL)
+
+except Exception as e:
+    notify(f"Startup error: {e}")
