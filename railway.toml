@@ -1,0 +1,6 @@
+[service]
+name = "twitter-unblock-monitor"
+type = "cron"
+schedule = "*/10 * * * *"  # каждые 10 минут
+command = "python main.py"
+
