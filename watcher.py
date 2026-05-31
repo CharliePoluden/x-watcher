@@ -1,13 +1,16 @@
 import os
 import time
 import requests
-from playwright.sync_api import sync_playwright
 
 USERNAME = os.getenv("USERNAME")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
 CHECK_INTERVAL = 30
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
 
 
 def notify(message):
@@ -22,27 +25,19 @@ def notify(message):
 
 
 def check_account():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    url = f"https://cdn.syndication.twimg.com/widgets/followbutton/info.json?screen_names={USERNAME}"
 
-        page.goto(f"https://x.com/{USERNAME}", wait_until="networkidle")
+    response = requests.get(url, headers=HEADERS, timeout=15)
 
-        content = page.content().lower()
+    if response.status_code != 200:
+        return False
 
-        browser.close()
+    data = response.json()
 
-        suspended_markers = [
-            "account suspended",
-            "действие учетной записи приостановлено",
-            "this account is suspended"
-        ]
+    if not data:
+        return False
 
-        for marker in suspended_markers:
-            if marker in content:
-                return False
-
-        return True
+    return True
 
 
 current_state = check_account()
@@ -50,7 +45,7 @@ current_state = check_account()
 if current_state:
     notify(f"Watcher started\n@{USERNAME} СЕЙЧАС ДОСТУПЕН")
 else:
-    notify(f"Watcher started\n@{USERNAME} СЕЙЧАС ЗАБЛОКИРОВАН")
+    notify(f"Watcher started\n@{USERNAME} СЕЙЧАС ЗАБЛОКИРОВАН / НЕ НАЙДЕН")
 
 last_state = current_state
 
@@ -62,7 +57,7 @@ while True:
             if current_state:
                 notify(f"🚨 @{USERNAME} РАЗБЛОКИРОВАН")
             else:
-                notify(f"⚠️ @{USERNAME} СНОВА ЗАБЛОКИРОВАН")
+                notify(f"⚠️ @{USERNAME} СНОВА НЕДОСТУПЕН")
 
             last_state = current_state
 
