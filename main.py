@@ -24,26 +24,30 @@ def get_twitter_status(username):
 
         html = resp.text
 
-        # Проверка заголовка страницы — самый точный признак
+        # 1. Проверка по заголовку страницы (точный признак)
         title_match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
         if title_match:
-            title = title_match.group(1).strip()
-            if title.lower() == "account suspended":
+            title = title_match.group(1).strip().lower()
+            if title == "account suspended":
                 return "suspended"
-            if "page not found" in title.lower():
+            if "page not found" in title:
                 return "not_found"
 
-        # Приватный аккаунт
+        # 2. Приватный аккаунт
         if "These Tweets are protected" in html:
             return "protected"
 
-        # Признаки живого аккаунта
-        if "react-root" in html and ("tweet" in html.lower() or "ProfileTweet" in html):
-            return "active"
+        # 3. Заблокированный аккаунт (data-testid="emptyState" + текст)
+        if re.search(r'data-testid="emptyState"', html) and "Account suspended" in html:
+            return "suspended"
 
-        # Запасной вариант для блокировки
+        # 4. Запасной вариант блокировки (старая фраза)
         if re.search(r"This account has been suspended", html, re.IGNORECASE):
             return "suspended"
+
+        # 5. Признаки живого аккаунта (есть react-root и нет маркеров блокировки)
+        if "react-root" in html:
+            return "active"
 
         return "unknown"
     except requests.RequestException:
@@ -89,7 +93,7 @@ def main():
         write_last_status(current_status)
         return
 
-    # Уведомление о разблокировке
+    # Уведомление о разблокировке (был suspended → стал не suspended)
     if last_status == "suspended" and current_status != "suspended":
         send_telegram_message(
             f"🚀 Аккаунт @{USERNAME} разблокирован!\n"
