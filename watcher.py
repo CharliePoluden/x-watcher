@@ -18,7 +18,8 @@ def notify(message):
         json={
             "chat_id": CHAT_ID,
             "text": message
-        }
+        },
+        timeout=10
     )
 
 def check_account():
@@ -27,21 +28,34 @@ def check_account():
     response = requests.get(url, headers=HEADERS, timeout=15)
     text = response.text.lower()
 
-    return "account suspended" not in text
+    if "account suspended" in text:
+        return False
 
-notify(f"Watcher started for @{USERNAME}")
+    return True
 
-last_state = check_account()
+
+current_state = check_account()
+
+if current_state:
+    notify(f"Watcher started\n@{USERNAME} СЕЙЧАС ДОСТУПЕН")
+else:
+    notify(f"Watcher started\n@{USERNAME} СЕЙЧАС ЗАБЛОКИРОВАН")
+
+last_state = current_state
 
 while True:
-    current_state = check_account()
+    try:
+        current_state = check_account()
 
-    if current_state != last_state:
-        if current_state:
-            notify(f"🚨 @{USERNAME} разблокирован")
-        else:
-            notify(f"@{USERNAME} снова заблокирован")
+        if current_state != last_state:
+            if current_state:
+                notify(f"🚨 @{USERNAME} РАЗБЛОКИРОВАН")
+            else:
+                notify(f"⚠️ @{USERNAME} СНОВА ЗАБЛОКИРОВАН")
 
-        last_state = current_state
+            last_state = current_state
+
+    except Exception as e:
+        notify(f"Ошибка: {e}")
 
     time.sleep(CHECK_INTERVAL)
