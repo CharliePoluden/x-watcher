@@ -25,21 +25,17 @@ def notify(message):
 
 
 def check_account():
-    url = f"https://x.com/{USERNAME}"
+    response = requests.get(
+        f"https://x.com/{USERNAME}",
+        headers=HEADERS,
+        timeout=15
+    )
 
-    response = requests.get(url, headers=HEADERS, timeout=15)
     html = response.text.lower()
 
-    suspended_markers = [
-        "suspended",
-        "account is suspended",
-        "account suspended",
-        "action":"suspended"
-    ]
-
-    for marker in suspended_markers:
-        if marker in html:
-            return False
+    # если есть этот маркер — аккаунт suspended
+    if "account suspended" in html:
+        return False
 
     return True
 
