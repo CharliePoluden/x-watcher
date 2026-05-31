@@ -24,7 +24,7 @@ def get_twitter_status(username):
 
         html = resp.text
 
-        # 1. Проверка по заголовку страницы (самый точный признак)
+        # Проверка заголовка страницы — самый точный признак
         title_match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
         if title_match:
             title = title_match.group(1).strip()
@@ -33,15 +33,15 @@ def get_twitter_status(username):
             if "page not found" in title.lower():
                 return "not_found"
 
-        # 2. Приватный аккаунт — фраза из тела
+        # Приватный аккаунт
         if "These Tweets are protected" in html:
             return "protected"
 
-        # 3. Признаки живого аккаунта (react-root и элементы твитов)
+        # Признаки живого аккаунта
         if "react-root" in html and ("tweet" in html.lower() or "ProfileTweet" in html):
             return "active"
 
-        # 4. Дополнительная проверка на suspend (старый способ, если title не сработал, но есть явный текст)
+        # Запасной вариант для блокировки
         if re.search(r"This account has been suspended", html, re.IGNORECASE):
             return "suspended"
 
@@ -80,7 +80,7 @@ def main():
 
     last_status = read_last_status()
 
-    # Первый запуск — сразу уведомляем о текущем статусе
+    # Первый запуск — сразу отправляем статус в Telegram
     if last_status is None:
         send_telegram_message(
             f"📡 Мониторинг аккаунта @{USERNAME} запущен.\n"
@@ -89,39 +89,14 @@ def main():
         write_last_status(current_status)
         return
 
-    # Уведомление о разблокировке (был suspended → стал не suspended)
+    # Уведомление о разблокировке
     if last_status == "suspended" and current_status != "suspended":
         send_telegram_message(
             f"🚀 Аккаунт @{USERNAME} разблокирован!\n"
             f"Текущий статус: {current_status}"
         )
-    # Обновляем сохранённое состояние, если изменилось
-    if last_status != current_status:
-        write_last_status(current_status)
 
-if __name__ == "__main__":
-    main()    current_status = get_twitter_status(USERNAME)
-    print(f"Status of @{USERNAME}: {current_status}")
-
-    last_status = read_last_status()
-
-    # Первый запуск (или состояние потеряно) — сразу шлём информационное сообщение
-    if last_status is None:
-        send_telegram_message(
-            f"📡 Мониторинг аккаунта @{USERNAME} запущен.\n"
-            f"Текущий статус: {current_status}"
-        )
-        write_last_status(current_status)
-        print("Initial status notification sent. Monitoring will continue from next run.")
-        return   # на этом первый запуск завершён
-
-    # Если аккаунт был заблокирован и теперь статус изменился (разблокировка)
-    if last_status == "suspended" and current_status != "suspended":
-        send_telegram_message(
-            f"🚀 Аккаунт @{USERNAME} разблокирован!\n"
-            f"Текущий статус: {current_status}"
-        )
-    # Обновляем сохранённый статус, если он изменился (в любом случае)
+    # Обновляем сохранённый статус, если он изменился
     if last_status != current_status:
         write_last_status(current_status)
 
