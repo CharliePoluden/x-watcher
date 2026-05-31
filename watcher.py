@@ -1,14 +1,14 @@
 import os
-import re
+import time
 import requests
+from playwright.sync_api import sync_playwright
 
 USERNAME = os.getenv("USERNAME")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+CHECK_INTERVAL = 30
+
 
 def notify(message):
     requests.post(
@@ -20,17 +20,53 @@ def notify(message):
         timeout=10
     )
 
-url = f"https://x.com/{USERNAME}"
 
-response = requests.get(url, headers=HEADERS, timeout=15)
-html = response.text
+def check_account():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
 
-title_match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
+        page.goto(f"https://x.com/{USERNAME}", wait_until="networkidle")
 
-title = title_match.group(1).strip() if title_match else "NO TITLE"
+        content = page.content().lower()
 
-notify(
-    f"STATUS: {response.status_code}\n"
-    f"TITLE: {title}\n"
-    f"HTML SAMPLE:\n{html[:500]}"
-)
+        browser.close()
+
+        suspended_markers = [
+            "account suspended",
+            "действие учетной записи приостановлено",
+            "this account is suspended"
+        ]
+
+        for marker in suspended_markers:
+            if marker in content:
+                return False
+
+        return True
+
+
+current_state = check_account()
+
+if current_state:
+    notify(f"Watcher started\n@{USERNAME} СЕЙЧАС ДОСТУПЕН")
+else:
+    notify(f"Watcher started\n@{USERNAME} СЕЙЧАС ЗАБЛОКИРОВАН")
+
+last_state = current_state
+
+while True:
+    try:
+        current_state = check_account()
+
+        if current_state != last_state:
+            if current_state:
+                notify(f"🚨 @{USERNAME} РАЗБЛОКИРОВАН")
+            else:
+                notify(f"⚠️ @{USERNAME} СНОВА ЗАБЛОКИРОВАН")
+
+            last_state = current_state
+
+    except Exception as e:
+        notify(f"Ошибка: {e}")
+
+    time.sleep(CHECK_INTERVAL)
