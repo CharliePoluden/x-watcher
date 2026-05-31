@@ -1,17 +1,59 @@
-import requests
+import os
 import time
+import requests
+from playwright.sync_api import sync_playwright
 
-print("STARTED", flush=True)
+USERNAME = os.getenv("USERNAME")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
-url = "https://cdn.syndication.twimg.com/widgets/followbutton/info.json?screen_names=pitch_erc"
+CHECK_INTERVAL = 30
 
-try:
-    r = requests.get(url, timeout=15)
-    print("STATUS:", r.status_code, flush=True)
-    print("TEXT:", r.text[:1000], flush=True)
-except Exception as e:
-    print("ERROR:", e, flush=True)
+
+def notify(msg):
+    requests.post(
+        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+        json={"chat_id": CHAT_ID, "text": msg},
+        timeout=10
+    )
+
+
+def is_suspended():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        page.goto(f"https://x.com/{USERNAME}", wait_until="domcontentloaded")
+
+        html = page.content().lower()
+
+        browser.close()
+
+        return "account suspended" in html
+
+
+state = is_suspended()
+
+notify(
+    f"Watcher started\n@{USERNAME} "
+    f"{'СЕЙЧАС ЗАБЛОКИРОВАН' if state else 'СЕЙЧАС ДОСТУПЕН'}"
+)
+
+last = state
 
 while True:
-    print("alive...", flush=True)
-    time.sleep(60)
+    try:
+        state = is_suspended()
+
+        if state != last:
+            if state:
+                notify(f"⚠️ @{USERNAME} ЗАБЛОКИРОВАН")
+            else:
+                notify(f"🚨 @{USERNAME} РАЗБЛОКИРОВАН")
+
+            last = state
+
+    except Exception as e:
+        notify(f"error: {e}")
+
+    time.sleep(CHECK_INTERVAL)
