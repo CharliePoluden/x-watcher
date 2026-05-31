@@ -11,7 +11,6 @@ CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 STATE_FILE = "/data/last_status.txt"
 
-# Диапазон случайной задержки (в секундах)
 MIN_DELAY = 60    # 1 минута
 MAX_DELAY = 72    # 1.2 минуты
 
@@ -84,21 +83,32 @@ def write_last_status(status):
     with open(STATE_FILE, "w") as f:
         f.write(status)
 
+def get_status_with_retries(username, retries=3, delay=5):
+    """Получить статус, повторяя попытки при 'unknown'."""
+    for _ in range(retries):
+        status = get_twitter_status(username)
+        if status != "unknown":
+            return status
+        time.sleep(delay)
+    return "unknown"
+
 def main():
     if not all([USERNAME, BOT_TOKEN, CHAT_ID]):
         print("Missing required environment variables.")
         sys.exit(1)
 
-    # Однократное стартовое уведомление (если состояние ещё не сохранено)
+    # Однократное стартовое уведомление (с повторными попытками)
     first_run = read_last_status() is None
     if first_run:
-        current_status = get_twitter_status(USERNAME)
+        current_status = get_status_with_retries(USERNAME)
         print(f"Initial status of @{USERNAME}: {current_status}")
         send_telegram_message(
             f"📡 Мониторинг аккаунта @{USERNAME} запущен.\n"
             f"Текущий статус: {current_status}"
         )
-        write_last_status(current_status)
+        # Сохраняем только если не unknown (иначе при следующем запуске снова попробуем)
+        if current_status != "unknown":
+            write_last_status(current_status)
 
     # Бесконечный цикл проверки
     while True:
@@ -110,18 +120,23 @@ def main():
             current_status = get_twitter_status(USERNAME)
             print(f"Status of @{USERNAME}: {current_status}")
 
+            # Если статус unknown (капча/сбой), игнорируем, не обновляем состояние
+            if current_status == "unknown":
+                continue
+
             last_status = read_last_status()
 
-            # Уведомление о разблокировке
-            if last_status == "suspended" and current_status != "suspended":
+            # Уведомление только при реальной разблокировке
+            if last_status == "suspended" and current_status in ("active", "protected"):
                 send_telegram_message(
                     f"🚀 Аккаунт @{USERNAME} разблокирован!\n"
                     f"Текущий статус: {current_status}"
                 )
 
-            # Если статус изменился (в том числе снова заблокирован) – сохраняем
+            # Обновляем сохранённый статус при любом изменении (кроме unknown)
             if last_status != current_status:
                 write_last_status(current_status)
+
         except Exception as e:
             print(f"Error during check: {e}")
             # При ошибке продолжаем цикл
