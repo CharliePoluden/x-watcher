@@ -29,12 +29,13 @@ def get_twitter_status(username):
 
         html = resp.text
 
-        # Проверка по внутренним данным (самый точный способ)
+        # --- ЕДИНСТВЕННЫЙ надёжный признак активного аккаунта ---
         if re.search(r'"screen_name"\s*:\s*"' + re.escape(username) + r'"', html):
             if "These Tweets are protected" in html:
                 return "protected"
             return "active"
 
+        # --- Признаки блокировки (ошибки с ApiError или failed) ---
         error_pattern = r'"errors"\s*:\s*\{[^}]*"' + re.escape(username) + r'"\s*:\s*\{[^}]*"displayName"\s*:\s*"ApiError"'
         if re.search(error_pattern, html):
             return "suspended"
@@ -43,7 +44,7 @@ def get_twitter_status(username):
         if re.search(fetch_fail, html):
             return "suspended"
 
-        # Запасные проверки
+        # --- Запасные (менее приоритетные) признаки блокировки ---
         title_match = re.search(r"<title>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
         if title_match:
             title = title_match.group(1).strip().lower()
@@ -55,9 +56,8 @@ def get_twitter_status(username):
         if re.search(r"This account has been suspended", html, re.IGNORECASE):
             return "suspended"
 
-        if "react-root" in html:
-            return "active"
-
+        # Всё остальное (капча, страница логина, пустая страница) — unknown,
+        # чтобы не сломать логику отслеживания.
         return "unknown"
     except requests.RequestException:
         return "unknown"
@@ -84,7 +84,6 @@ def write_last_status(status):
         f.write(status)
 
 def get_status_with_retries(username, retries=3, delay=5):
-    """Получить статус, повторяя попытки при 'unknown'."""
     for _ in range(retries):
         status = get_twitter_status(username)
         if status != "unknown":
@@ -97,7 +96,6 @@ def main():
         print("Missing required environment variables.")
         sys.exit(1)
 
-    # Однократное стартовое уведомление (с повторными попытками)
     first_run = read_last_status() is None
     if first_run:
         current_status = get_status_with_retries(USERNAME)
@@ -106,11 +104,9 @@ def main():
             f"📡 Мониторинг аккаунта @{USERNAME} запущен.\n"
             f"Текущий статус: {current_status}"
         )
-        # Сохраняем только если не unknown (иначе при следующем запуске снова попробуем)
         if current_status != "unknown":
             write_last_status(current_status)
 
-    # Бесконечный цикл проверки
     while True:
         delay = random.uniform(MIN_DELAY, MAX_DELAY)
         print(f"Sleeping for {delay:.1f} seconds")
@@ -120,7 +116,7 @@ def main():
             current_status = get_twitter_status(USERNAME)
             print(f"Status of @{USERNAME}: {current_status}")
 
-            # Если статус unknown (капча/сбой), игнорируем, не обновляем состояние
+            # unknown — игнорируем, состояние не меняем
             if current_status == "unknown":
                 continue
 
@@ -133,13 +129,11 @@ def main():
                     f"Текущий статус: {current_status}"
                 )
 
-            # Обновляем сохранённый статус при любом изменении (кроме unknown)
             if last_status != current_status:
                 write_last_status(current_status)
 
         except Exception as e:
             print(f"Error during check: {e}")
-            # При ошибке продолжаем цикл
 
 if __name__ == "__main__":
     main()
